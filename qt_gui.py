@@ -5,7 +5,8 @@ from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QFileDialog, QListWidget, QFrame, 
                             QProgressBar, QTextEdit, QComboBox, QLineEdit, QCheckBox,
-                            QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea, QSizePolicy)
+                            QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea, QSizePolicy,
+                            QDialog, QDialogButtonBox) # Dodane QDialog i QDialogButtonBox
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize, QByteArray
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QScreen
 from config import ConfigManager
@@ -52,6 +53,144 @@ class DropArea(QLabel):
         else:
             event.ignore()
 
+# ==== KLASA DIALOGU OPCJI ====
+class OptionsDialog(QDialog):
+    def __init__(self, parent=None, current_options=None, available_formats=None):
+        super().__init__(parent)
+        self.setWindowTitle("Opcje Konwersji")
+        self.setMinimumWidth(450) 
+        
+        self.available_formats = available_formats if available_formats else \
+                                 ["JPEG", "PNG", "BMP", "TIFF", "WebP", "GIF"] # Fallback
+
+        main_dialog_layout = QVBoxLayout(self)
+
+        # Layout dla opcji
+        options_layout = QGridLayout()
+
+        # Kontrolki (przeniesione/zreimplementowane z ImageConverterGUI.create_widgets)
+        # Format wyjściowy
+        options_layout.addWidget(QLabel("Format wyjściowy:"), 0, 0)
+        self.format_combo = QComboBox()
+        # Zakładamy, że ImageConverter().get_available_formats() jest dostępne,
+        # ale lepiej przekazać listę formatów lub instancję converter'a
+        self.format_combo.addItems(self.available_formats)
+        options_layout.addWidget(self.format_combo, 0, 1)
+
+        # Opcja WebP lossless (powiązana z format_combo)
+        self.webp_lossless_check = QCheckBox("WebP bezstratny")
+        options_layout.addWidget(self.webp_lossless_check, 0, 2)
+        self.format_combo.currentTextChanged.connect(self._update_webp_lossless_state_in_dialog)
+        self._update_webp_lossless_state_in_dialog() # Stan początkowy
+
+        # Maksymalny rozmiar
+        options_layout.addWidget(QLabel("Maksymalny rozmiar (KB):"), 1, 0)
+        self.max_size_input = QLineEdit()
+        options_layout.addWidget(self.max_size_input, 1, 1)
+        options_layout.addWidget(QLabel("(tylko dla JPEG i WebP)"), 1, 2)
+        
+        # Rozdzielczość - dłuższa krawędź
+        options_layout.addWidget(QLabel("Dłuższa krawędź:"), 2, 0)
+        self.longer_edge_input = QLineEdit()
+        options_layout.addWidget(self.longer_edge_input, 2, 1)
+        
+        # Rozdzielczość - krótsza krawędź
+        options_layout.addWidget(QLabel("Krótsza krawędź:"), 3, 0)
+        self.shorter_edge_input = QLineEdit()
+        options_layout.addWidget(self.shorter_edge_input, 3, 1)
+        options_layout.addWidget(QLabel("(możesz podać tylko jedną wartość)"), 3, 2)
+        
+        # Sufiks
+        options_layout.addWidget(QLabel("Sufiks nazwy pliku:"), 4, 0)
+        self.suffix_input = QLineEdit()
+        options_layout.addWidget(self.suffix_input, 4, 1, 1, 2) # Rozciąga się na 2 kolumny
+        
+        # Katalog wyjściowy (w dialogu może nie być potrzebny przycisk "Otwórz katalog")
+        options_layout.addWidget(QLabel("Katalog wyjściowy:"), 5, 0)
+        self.output_dir_input = QLineEdit()
+        options_layout.addWidget(self.output_dir_input, 5, 1, 1, 2) # Rozciąga się na 2 kolumny
+        
+        browse_btn = QPushButton("Przeglądaj...")
+        browse_btn.clicked.connect(self._select_output_directory_in_dialog) # Podłączono
+        options_layout.addWidget(browse_btn, 5, 3)
+        
+        # Opcja usuwania oryginałów
+        self.delete_originals_check = QCheckBox("Usuń oryginalne pliki po udanej konwersji")
+        options_layout.addWidget(self.delete_originals_check, 6, 0, 1, 3) # Rozciąga się na 3 kolumny
+        
+        # Opcja usuwania metadanych
+        self.strip_metadata_check = QCheckBox("Usuń metadane (EXIF, ICC, etc.)")
+        options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3)
+        
+        # Opcja numerowania plików wynikowych
+        self.number_output_files_check = QCheckBox("Numeruj pliki wynikowe (np. 01_nazwa.jpg)")
+        options_layout.addWidget(self.number_output_files_check, 8, 0, 1, 3)
+
+        main_dialog_layout.addLayout(options_layout)
+
+        # Przyciski OK / Anuluj
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        main_dialog_layout.addWidget(button_box)
+
+        if current_options:
+            self.set_initial_options(current_options)
+        else: # Ustaw stan początkowy dla webp_lossless_check nawet jeśli nie ma current_options
+            self._update_webp_lossless_state_in_dialog()
+
+
+    def _update_webp_lossless_state_in_dialog(self, current_format_text=None):
+        """Aktualizuje stan checkboxa WebP lossless na podstawie wybranego formatu w dialogu."""
+        if current_format_text is None:
+            current_format_text = self.format_combo.currentText()
+        
+        if current_format_text == "WebP":
+            self.webp_lossless_check.setEnabled(True)
+        else:
+            self.webp_lossless_check.setEnabled(False)
+            self.webp_lossless_check.setChecked(False) # Odznacz, jeśli nie WebP
+
+    def _select_output_directory_in_dialog(self):
+        """Otwiera dialog wyboru katalogu wyjściowego dla tego dialogu."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Wybierz katalog wyjściowy", 
+            self.output_dir_input.text() # Użyj bieżącej wartości jako startowej
+        )
+        if directory:
+            self.output_dir_input.setText(directory)
+            
+    def set_initial_options(self, options_dict):
+        """Ustawia wartości kontrolek na podstawie przekazanego słownika."""
+        self.format_combo.setCurrentText(options_dict.get('output_format', 'JPEG'))
+        # Wywołanie _update_webp_lossless_state_in_dialog po ustawieniu formatu
+        self._update_webp_lossless_state_in_dialog(self.format_combo.currentText()) 
+        
+        self.webp_lossless_check.setChecked(options_dict.get('webp_lossless', False))
+        self.max_size_input.setText(options_dict.get('max_size', ''))
+        self.longer_edge_input.setText(options_dict.get('longer_edge', ''))
+        self.shorter_edge_input.setText(options_dict.get('shorter_edge', ''))
+        self.suffix_input.setText(options_dict.get('suffix', '_converted'))
+        self.output_dir_input.setText(options_dict.get('output_directory', ''))
+        self.delete_originals_check.setChecked(options_dict.get('delete_originals', False))
+        self.strip_metadata_check.setChecked(options_dict.get('strip_metadata', False))
+        self.number_output_files_check.setChecked(options_dict.get('number_output_files', False))
+
+    def get_updated_options(self):
+        """Zbiera wartości z kontrolek i zwraca je jako słownik."""
+        return {
+            'output_format': self.format_combo.currentText(),
+            'webp_lossless': self.webp_lossless_check.isChecked(),
+            'max_size': self.max_size_input.text(),
+            'longer_edge': self.longer_edge_input.text(),
+            'shorter_edge': self.shorter_edge_input.text(),
+            'suffix': self.suffix_input.text(),
+            'output_directory': self.output_dir_input.text(),
+            'delete_originals': self.delete_originals_check.isChecked(),
+            'strip_metadata': self.strip_metadata_check.isChecked(),
+            'number_output_files': self.number_output_files_check.isChecked()
+        }
+
 class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -91,8 +230,10 @@ class ImageConverterGUI(QMainWindow):
         # Utwórz GUI
         self.create_widgets() # self.log_text jest tworzone tutaj
         
-        # Załaduj zapisane ustawienia do kontrolek
-        self.load_settings_to_ui()
+        # Załaduj zapisane ustawienia do kontrolek - JUŻ NIEPOTRZEBNE W __init__
+        # self.load_settings_to_ui() 
+        # self.settings są ładowane, a OptionsDialog użyje ich przy otwarciu.
+        # Główne okno nie wyświetla już tych opcji bezpośrednio.
 
         # Teraz można logować, bo self.log_text istnieje
         if "window_geometry" in self.settings and self.settings["window_geometry"]:
@@ -106,6 +247,27 @@ class ImageConverterGUI(QMainWindow):
             self.log_message("Ustawiono domyślny rozmiar okna (750x700).")
             
         self.apply_app_styles()
+
+    def open_options_dialog(self):
+        """Otwiera dialog konfiguracji opcji konwersji."""
+        # a. Pobierz dostępne formaty z instancji konwertera
+        available_formats = self.converter.get_available_formats()
+
+        # b. Utwórz i pokaż dialog, przekazując bieżące ustawienia i dostępne formaty
+        # self.settings jest słownikiem, który będzie aktualizowany
+        dialog = OptionsDialog(parent=self, current_options=self.settings, available_formats=available_formats)
+        
+        # c. Jeśli dialog został zaakceptowany (OK), zaktualizuj ustawienia
+        if dialog.exec(): # exec() jest blokujące i zwraca QDialog.DialogCode.Accepted lub QDialog.DialogCode.Rejected
+            new_settings = dialog.get_updated_options()
+            self.settings.update(new_settings) # Aktualizuj główny słownik ustawień
+            self.log_message("Zaktualizowano opcje konwersji.")
+            # Można rozważyć automatyczne zapisanie ustawień po zmianie w dialogu:
+            # self.save_settings() # Jeśli chcemy, aby zmiany były od razu zapisywane do pliku
+            # Lub zostawić to użytkownikowi, by kliknął "Zapisz ustawienia" w głównym oknie
+        else:
+            self.log_message("Anulowano zmiany w opcjach konwersji.")
+
 
     def toggle_options_visibility(self, is_checked):
         """Pokazuje lub ukrywa kontener opcji oraz dostosowuje rozmiar okna."""
@@ -156,6 +318,10 @@ class ImageConverterGUI(QMainWindow):
             self.resize(self.width(), final_window_height)
             # self.log_message(f"Zmiana wysokości okna o: {delta_height}, stara_kont: {old_height}, nowa_kont: {new_height}, okno: {final_window_height}")
 
+    # Metoda toggle_options_visibility nie jest już potrzebna, ponieważ QGroupBox opcji został usunięty.
+    # def toggle_options_visibility(self, is_checked):
+    #     """Pokazuje lub ukrywa kontener opcji oraz dostosowuje rozmiar okna."""
+    #     # ... (stara logika) ...
 
     def apply_app_styles(self):
         qss_style_string = """
@@ -218,34 +384,29 @@ class ImageConverterGUI(QMainWindow):
         self.setStyleSheet(qss_style_string)
 
     def load_settings_to_ui(self):
-        """Załaduj ustawienia z pliku do kontrolek UI"""
-        self.max_size_input.setText(self.settings.get("max_size", ""))
-        self.longer_edge_input.setText(self.settings.get("longer_edge", ""))
-        self.shorter_edge_input.setText(self.settings.get("shorter_edge", ""))
-        self.suffix_input.setText(self.settings.get("suffix", "_converted"))
+        """Załaduj ustawienia z pliku do kontrolek UI (jeśli są jakieś, które nie są w OptionsDialog)."""
+        # Ta metoda jest teraz znacznie uproszczona, ponieważ większość kontrolek opcji
+        # została przeniesiona do OptionsDialog. 
+        # Jeśli w głównym oknie byłyby inne kontrolki, które zależą od self.settings,
+        # ich ładowanie odbywałoby się tutaj.
         
-        # Znajdź indeks formatu w comboboxie
-        format_index = self.format_combo.findText(self.settings.get("output_format", "JPEG"))
-        if format_index >= 0:
-            self.format_combo.setCurrentIndex(format_index)
-            
-        self.output_dir_input.setText(self.settings.get("output_directory", ""))
-        self.delete_originals_check.setChecked(self.settings.get("delete_originals", False))
-        self.strip_metadata_check.setChecked(self.settings.get("strip_metadata", False))
-        self.webp_lossless_check.setChecked(self.settings.get("webp_lossless", False))
-        self.number_output_files_check.setChecked(self.settings.get("number_output_files", False))
+        # Przykład: Jeśli self.some_other_main_window_widget zależałoby od ustawienia:
+        # self.some_other_main_window_widget.setText(self.settings.get("some_other_setting", "default_value"))
         
-        # Wczytaj i zastosuj stan zwinięcia QGroupBox "Opcje konwersji"
-        options_expanded = self.settings.get('options_group_expanded', True) # Domyślnie rozwinięte
-        self.options_group.setChecked(options_expanded)
-        # Bezpośrednie ustawienie widoczności kontenera, ponieważ toggle_options_visibility jest podłączone do sygnału toggled,
-        # a setChecked programistycznie niekoniecznie emituje ten sygnał w taki sam sposób jak kliknięcie użytkownika
-        # (lub chcemy uniknąć potencjalnego podwójnego wywołania lub problemów z timingiem).
-        self.options_container_widget.setVisible(options_expanded)
+        # Usunięto linie odnoszące się do:
+        # self.max_size_input, self.longer_edge_input, self.shorter_edge_input, self.suffix_input,
+        # self.format_combo, self.output_dir_input, self.delete_originals_check,
+        # self.strip_metadata_check, self.webp_lossless_check, self.number_output_files_check,
+        # self.options_group, self.options_container_widget,
+        # oraz self.update_webp_lossless_check_state() - ponieważ te widgety są teraz w OptionsDialog.
+        
+        # Jeśli `toggle_options_visibility` i `update_webp_lossless_check_state` są nadal potrzebne
+        # jako metody ImageConverterGUI (np. jeśli są wywoływane z innych miejsc),
+        # powinny zostać, ale ich logika odnosząca się do nieistniejących widgetów powinna być
+        # usunięta lub dostosowana. Zgodnie z poprzednimi krokami, `toggle_options_visibility`
+        # zostało usunięte, a `update_webp_lossless_check_state` również powinno być usunięte.
+        pass # Obecnie nie ma potrzeby niczego tutaj robić.
 
-        # Upewnij się, że stan checkboxa WebP lossless jest poprawny po załadowaniu
-        self.update_webp_lossless_check_state()
-    
     def create_widgets(self):
         """Utwórz wszystkie widgety interfejsu użytkownika"""
         # Centralny widget
@@ -290,91 +451,17 @@ class ImageConverterGUI(QMainWindow):
         
         # main_layout.addWidget(file_group) # Zostanie dodane do splittera
         
-        # ==== SEKCJA OPCJI KONWERSJI ====
-        self.options_group = QGroupBox("Opcje konwersji") # Zmieniono na self.options_group
-        self.options_group.setCheckable(True) # Umożliwia zwijanie
-        self.options_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        # ==== SEKCJA OPCJI KONWERSJI (TERAZ PRZYCISK OTWIERAJĄCY DIALOG) ====
+        # Usuwamy stary QGroupBox options_group i jego zawartość
         
-        # Kontener na wszystkie opcje wewnątrz QGroupBox
-        self.options_container_widget = QWidget()
-        self.options_container_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        options_layout = QGridLayout(self.options_container_widget) # Istniejący layout przypisany do kontenera
-        # self.options_container_widget.setLayout(options_layout) # Już zrobione przez konstruktor QGridLayout
+        self.options_button = QPushButton("Opcje konwersji...")
+        self.options_button.clicked.connect(self.open_options_dialog)
+        # Dodajemy przycisk opcji do top_layout, np. przed przyciskami akcji
+        # lub w miejscu gdzie był options_group. Zależy od preferencji układu.
+        # Na razie dodamy go jako część top_widget, tak jak był options_group.
 
-        # Główny layout dla QGroupBox, który będzie zawierał kontener
-        options_group_main_layout = QVBoxLayout(self.options_group) # Layout dla self.options_group
-        options_group_main_layout.addWidget(self.options_container_widget)
-        # self.options_group.setLayout(options_group_main_layout) # Już zrobione przez konstruktor QVBoxLayout
-        
-        self.options_group.toggled.connect(self.toggle_options_visibility)
-
-        # Format wyjściowy
-        options_layout.addWidget(QLabel("Format wyjściowy:"), 0, 0)
-        self.format_combo = QComboBox()
-        self.format_combo.addItems(self.converter.get_available_formats())
-        options_layout.addWidget(self.format_combo, 0, 1)
-
-        # Opcja WebP lossless
-        self.webp_lossless_check = QCheckBox("WebP bezstratny")
-        options_layout.addWidget(self.webp_lossless_check, 0, 2) # Obok formatu
-        self.format_combo.currentTextChanged.connect(self.update_webp_lossless_check_state)
-        self.update_webp_lossless_check_state() # Ustaw stan początkowy zaraz po utworzeniu widgetu
-        
-        # Maksymalny rozmiar
-        options_layout.addWidget(QLabel("Maksymalny rozmiar (KB):"), 1, 0)
-        self.max_size_input = QLineEdit()
-        options_layout.addWidget(self.max_size_input, 1, 1)
-        options_layout.addWidget(QLabel("(tylko dla JPEG i WebP)"), 1, 2)
-        
-        # Rozdzielczość - dłuższa krawędź
-        options_layout.addWidget(QLabel("Dłuższa krawędź:"), 2, 0)
-        self.longer_edge_input = QLineEdit()
-        options_layout.addWidget(self.longer_edge_input, 2, 1)
-        
-        # Rozdzielczość - krótsza krawędź
-        options_layout.addWidget(QLabel("Krótsza krawędź:"), 3, 0)
-        self.shorter_edge_input = QLineEdit()
-        options_layout.addWidget(self.shorter_edge_input, 3, 1)
-        options_layout.addWidget(QLabel("(możesz podać tylko jedną wartość)"), 3, 2)
-        
-        # Sufiks
-        options_layout.addWidget(QLabel("Sufiks nazwy pliku:"), 4, 0)
-        self.suffix_input = QLineEdit()
-        options_layout.addWidget(self.suffix_input, 4, 1, 1, 2)
-        
-        # Katalog wyjściowy
-        options_layout.addWidget(QLabel("Katalog wyjściowy:"), 5, 0)
-        self.output_dir_input = QLineEdit()
-        options_layout.addWidget(self.output_dir_input, 5, 1, 1, 2)
-        
-        dir_buttons_layout = QHBoxLayout()
-        browse_btn = QPushButton("Przeglądaj...")
-        browse_btn.clicked.connect(self.select_output_directory)
-        open_dir_btn = QPushButton("Otwórz katalog")
-        open_dir_btn.clicked.connect(self.open_output_directory)
-        
-        dir_buttons_layout.addWidget(browse_btn)
-        dir_buttons_layout.addWidget(open_dir_btn)
-        dir_buttons_layout.addStretch()
-        
-        options_layout.addLayout(dir_buttons_layout, 5, 3)
-        
-        # Opcja usuwania oryginałów
-        self.delete_originals_check = QCheckBox("Usuń oryginalne pliki po udanej konwersji")
-        options_layout.addWidget(self.delete_originals_check, 6, 0, 1, 3) # Zmieniono span na 3
-        
-        # Opcja usuwania metadanych
-        self.strip_metadata_check = QCheckBox("Usuń metadane (EXIF, ICC, etc.)")
-        options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3)
-        
-        # Opcja numerowania plików wynikowych
-        self.number_output_files_check = QCheckBox("Numeruj pliki wynikowe (np. 01_nazwa.jpg)")
-        options_layout.addWidget(self.number_output_files_check, 8, 0, 1, 3)
-
-        # main_layout.addWidget(options_group) # Zostanie dodane do splittera
-        
         # ==== PRZYCISKI AKCJI ====
-        action_layout = QHBoxLayout()
+        action_layout = QHBoxLayout() # Ten layout będzie teraz zawierał tylko "Zapisz ustawienia" i "Konwertuj"
         save_settings_btn = QPushButton("Zapisz ustawienia")
         save_settings_btn.clicked.connect(self.save_settings)
         action_layout.addWidget(save_settings_btn)
@@ -414,7 +501,8 @@ class ImageConverterGUI(QMainWindow):
         self.top_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         top_layout = QVBoxLayout(self.top_widget) # Użyj self.top_widget
         top_layout.addWidget(file_group)
-        top_layout.addWidget(self.options_group) # Użyj self.options_group
+        # top_layout.addWidget(self.options_group) # Usunięto stary options_group
+        top_layout.addWidget(self.options_button) # Dodano przycisk opcji
         top_layout.addLayout(action_layout)
         top_layout.addWidget(self.progress_bar)
         # self.top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
@@ -436,16 +524,11 @@ class ImageConverterGUI(QMainWindow):
         # main_layout.setStretch(3, 0)
         # main_layout.setStretch(4, 2)
 
-    def update_webp_lossless_check_state(self, current_format_text=None):
-        """Aktualizuje stan checkboxa WebP lossless na podstawie wybranego formatu."""
-        if current_format_text is None:
-            current_format_text = self.format_combo.currentText()
-        
-        if current_format_text == "WebP":
-            self.webp_lossless_check.setEnabled(True)
-        else:
-            self.webp_lossless_check.setEnabled(False)
-            self.webp_lossless_check.setChecked(False) # Odznacz, jeśli nie WebP
+    # Metoda update_webp_lossless_check_state nie jest już potrzebna,
+    # ponieważ self.format_combo i self.webp_lossless_check zostały przeniesione do OptionsDialog.
+    # def update_webp_lossless_check_state(self, current_format_text=None):
+    #     """Aktualizuje stan checkboxa WebP lossless na podstawie wybranego formatu."""
+    #     # ... (stara logika) ...
     
     def log_message(self, message):
         """Dodaje wiadomość do pola logu."""
@@ -540,40 +623,32 @@ class ImageConverterGUI(QMainWindow):
     
     def save_settings(self):
         """Zapisuje ustawienia do pliku konfiguracyjnego."""
-        settings = {
-            "max_size": self.max_size_input.text(),
-            "longer_edge": self.longer_edge_input.text(),
-            "shorter_edge": self.shorter_edge_input.text(),
-            "suffix": self.suffix_input.text(),
-            "output_format": self.format_combo.currentText(),
-            "output_directory": self.output_dir_input.text(),
-            "delete_originals": self.delete_originals_check.isChecked(),
-            "strip_metadata": self.strip_metadata_check.isChecked(),
-            "webp_lossless": self.webp_lossless_check.isChecked(),
-            "number_output_files": self.number_output_files_check.isChecked()
-        }
+        # Kopiujemy self.settings, aby uniknąć modyfikacji oryginału, jeśli ConfigManager by to robił
+        settings_to_save = self.settings.copy()
         
-        # Zapisz geometrię okna
-        settings["window_geometry"] = self.saveGeometry().toBase64().data().decode('utf-8')
-        # Zapisz stan zwinięcia QGroupBox "Opcje konwersji"
-        settings['options_group_expanded'] = self.options_group.isChecked()
+        # Dodaj/zaktualizuj ustawienia specyficzne dla głównego okna, które nie są w dialogu
+        settings_to_save["window_geometry"] = self.saveGeometry().toBase64().data().decode('utf-8')
+        # 'options_group_expanded' nie jest już potrzebne, bo QGroupBox opcji został usunięty
+        # Jeśli byłyby inne ustawienia UI głównego okna do zapisania, dodaj je tutaj.
         
-        self.config_manager.save_settings(settings)
-        QMessageBox.information(self, "Informacja", "Ustawienia zostały zapisane")
+        self.config_manager.save_settings(settings_to_save)
+        self.log_message("Ustawienia zostały zapisane.") # Zmieniono QMessageBox na log_message
+        # QMessageBox.information(self, "Informacja", "Ustawienia zostały zapisane") # Można przywrócić, jeśli preferowane
     
-    def calculate_dimensions(self, original_width, original_height):
+    def calculate_dimensions(self, original_width, original_height, longer_edge_str, shorter_edge_str):
         """
         Oblicza nowe wymiary obrazu na podstawie ustawień dłuższej i krótszej krawędzi
         
         Args:
             original_width (int): Oryginalna szerokość obrazu
             original_height (int): Oryginalna wysokość obrazu
+            longer_edge_str (str): Wartość dłuższej krawędzi z ustawień (jako string)
+            shorter_edge_str (str): Wartość krótszej krawędzi z ustawień (jako string)
             
         Returns:
             tuple: (nowa_szerokość, nowa_wysokość) lub None jeśli nie ustawiono wymiarów
         """
-        longer_edge = self.longer_edge_input.text()
-        shorter_edge = self.shorter_edge_input.text()
+        # longer_edge i shorter_edge są teraz przekazywane jako argumenty
         
         # Określ, która krawędź jest dłuższa, a która krótsza w oryginalnym obrazie
         if original_width >= original_height:
@@ -589,8 +664,8 @@ class ImageConverterGUI(QMainWindow):
         aspect_ratio = original_longer / original_shorter
         
         # Przetwarzanie wartości wejściowych
-        longer_edge_val = int(longer_edge) if longer_edge and longer_edge.isdigit() else None
-        shorter_edge_val = int(shorter_edge) if shorter_edge and shorter_edge.isdigit() else None
+        longer_edge_val = int(longer_edge_str) if longer_edge_str and longer_edge_str.isdigit() else None
+        shorter_edge_val = int(shorter_edge_str) if shorter_edge_str and shorter_edge_str.isdigit() else None
         
         # Obliczanie nowych wymiarów
         if longer_edge_val and shorter_edge_val:
@@ -621,18 +696,22 @@ class ImageConverterGUI(QMainWindow):
             QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano plików do konwersji")
             return
         
-        # Pobieranie ustawień
-        max_size = self.max_size_input.text()
-        if max_size and max_size.isdigit():
-            max_size = int(max_size)
+        # Pobieranie ustawień z self.settings
+        max_size_str = self.settings.get('max_size', '')
+        if max_size_str and max_size_str.isdigit():
+            max_size = int(max_size_str)
         else:
             max_size = None
             
-        suffix = self.suffix_input.text()
-        output_format = self.format_combo.currentText()
-        output_dir = self.output_dir_input.text()
+        suffix = self.settings.get('suffix', '_converted')
+        output_format = self.settings.get('output_format', 'JPEG') # Pobierz z self.settings
+        output_dir = self.settings.get('output_directory', '')   # Pobierz z self.settings
         
-        number_files_option = self.number_output_files_check.isChecked()
+        number_files_option = self.settings.get('number_output_files', False) # Pobierz z self.settings
+        strip_metadata_option = self.settings.get('strip_metadata', False)   # Pobierz z self.settings
+        webp_lossless_option = self.settings.get('webp_lossless', False)     # Pobierz z self.settings
+        delete_originals_option = self.settings.get('delete_originals', False) # Pobierz z self.settings
+
         file_counter = 1 # Zainicjuj licznik dla partii plików
         
         # Sprawdź i utwórz katalog wyjściowy, jeśli podano
@@ -677,13 +756,13 @@ class ImageConverterGUI(QMainWindow):
                 with Image.open(image_path) as img:
                     orig_width, orig_height = img.size
                     
-                    # Obliczenie nowych wymiarów
-                    new_dimensions = self.calculate_dimensions(orig_width, orig_height)
-
-                strip_metadata_option = self.strip_metadata_check.isChecked()
-                webp_lossless_option = False
-                if self.format_combo.currentText() == "WebP" and self.webp_lossless_check.isEnabled() and self.webp_lossless_check.isChecked():
-                    webp_lossless_option = True
+                    # Obliczenie nowych wymiarów na podstawie wartości z self.settings
+                    longer_edge_str = self.settings.get('longer_edge', '')
+                    shorter_edge_str = self.settings.get('shorter_edge', '')
+                    new_dimensions = self.calculate_dimensions(orig_width, orig_height, longer_edge_str, shorter_edge_str) # Przekaż stringi
+                
+                # Opcje webp_lossless i strip_metadata są już pobrane z self.settings
+                # Nie ma potrzeby ich ponownie sprawdzać z kontrolek
                 
                 self.converter.convert_heic_to_format(
                     image_path, 
@@ -691,14 +770,14 @@ class ImageConverterGUI(QMainWindow):
                     output_format=output_format,
                     max_size_kb=max_size, 
                     new_resolution=new_dimensions,
-                    strip_metadata=strip_metadata_option,
-                    webp_lossless=webp_lossless_option
+                    strip_metadata=strip_metadata_option, # Użyj wartości z self.settings
+                    webp_lossless=webp_lossless_option   # Użyj wartości z self.settings
                 )
                 
                 self.log_message(f" -> Zapisano jako: {os.path.basename(output_file)}")
                 
                 # Usuń oryginalny plik, jeśli opcja jest włączona
-                if self.delete_originals_check.isChecked():
+                if delete_originals_option: # Użyj wartości z self.settings
                     try:
                         os.remove(image_path)
                         self.log_message(f"   Usunięto oryginał: {os.path.basename(image_path)}")
