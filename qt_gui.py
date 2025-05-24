@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QLabel, QPushButton, QFileDialog, QListWidget, QFrame, 
                             QProgressBar, QTextEdit, QComboBox, QLineEdit, QCheckBox,
                             QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea)
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize, QByteArray
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from config import ConfigManager
 from file_manager import FileManager
@@ -18,17 +18,20 @@ class DropArea(QLabel):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("ImageDropArea") # Ustawienie objectName dla specyficzności QSS
         self.setText("Upuść pliki obrazów tutaj")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumHeight(100)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
+        # self.setFrameShape(QFrame.Shape.StyledPanel) # QSS będzie kontrolować ramkę
         self.setAcceptDrops(True)
-        self.original_style_sheet = self.styleSheet() # Zapisz oryginalny styl
+        
+        self.original_style_sheet = "QLabel#ImageDropArea { border: 2px dashed #aaa; border-radius: 5px; color: #555; background-color: #f9f9f9; }"
+        self.setStyleSheet(self.original_style_sheet)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.accept()
-            self.setStyleSheet("background-color: lightblue;") # Podświetlenie
+            self.setStyleSheet("QLabel#ImageDropArea { border: 2px dashed #0078d7; border-radius: 5px; color: #333; background-color: #e6f2ff; }")
         else:
             event.ignore()
 
@@ -66,14 +69,104 @@ class ImageConverterGUI(QMainWindow):
         
         # Ustawienia okna
         self.setWindowTitle("Konwerter Obrazów")
-        self.setMinimumSize(700, 650)
+        self.setMinimumSize(700, 650) # Ustaw minimalny rozmiar najpierw
+
+        geometry_restored = False
+        if "window_geometry" in self.settings and self.settings["window_geometry"]:
+            try:
+                if self.restoreGeometry(QByteArray.fromBase64(self.settings["window_geometry"].encode('utf-8'))):
+                    # self.log_message("Odtworzono rozmiar i pozycję okna.") # Log message będzie dodany później, gdy log_text będzie dostępne
+                    geometry_restored = True
+                else:
+                    # self.log_message("Nie udało się odtworzyć geometrii okna (restoreGeometry zwróciło False).")
+                    pass # Log message będzie dodany później
+            except Exception as e:
+                # self.log_message(f"Błąd podczas odtwarzania geometrii okna: {e}")
+                pass # Log message będzie dodany później
+
+        if not geometry_restored:
+            # self.log_message("Ustawianie domyślnego rozmiaru okna.") # Log message będzie dodany później
+            self.resize(750, 700) # Ustaw nieco większy domyślny rozmiar dla lepszego pierwszego wrażenia
         
         # Utwórz GUI
-        self.create_widgets()
+        self.create_widgets() # self.log_text jest tworzone tutaj
         
         # Załaduj zapisane ustawienia do kontrolek
         self.load_settings_to_ui()
-    
+
+        # Teraz można logować, bo self.log_text istnieje
+        if "window_geometry" in self.settings and self.settings["window_geometry"]:
+            if geometry_restored:
+                 self.log_message("Odtworzono rozmiar i pozycję okna.")
+            else: # Tutaj można zalogować błędy, jeśli restoreGeometry zwróciło False lub był wyjątek
+                if not self.restoreGeometry(QByteArray.fromBase64(self.settings["window_geometry"].encode('utf-8'))):
+                     self.log_message("Nie udało się odtworzyć geometrii okna (restoreGeometry zwróciło False) po utworzeniu widgetów.")
+                # Błędy z exception są trudniejsze do złapania tutaj ponownie bez duplikacji kodu
+        elif not geometry_restored : # Jeśli nie było geometrii lub jeśli odtworzenie nie powiodło się wcześniej
+            self.log_message("Ustawiono domyślny rozmiar okna (750x700).")
+            
+        self.apply_app_styles()
+
+    def apply_app_styles(self):
+        qss_style_string = """
+        QGroupBox { 
+            margin-top: 1ex; /* Odstęp od góry dla tytułu */
+            font-weight: bold; 
+            border: 1px solid #ccc; /* Subtelne obramowanie dla groupboxa */
+            border-radius: 5px;
+            padding-top: 1.5ex; /* Dodatkowy padding, aby tytuł nie nachodził na zawartość */
+        }
+        QGroupBox::title { 
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 0 5px; /* Padding wokół tekstu tytułu */
+            left: 10px; /* Odsunięcie tytułu od lewej krawędzi */
+            background-color: #f0f0f0; /* Lekkie tło dla tytułu, aby "wystawał" z ramki */
+            border-radius: 3px;
+        }
+        QPushButton { 
+            padding: 6px 12px; /* Większy padding */
+            border: 1px solid #ccc;
+            border-radius: 4px; 
+            background-color: #f0f0f0; /* Domyślny kolor tła */
+            color: #333; /* Kolor tekstu */
+        }
+        QPushButton:hover {
+            background-color: #e9e9e9; /* Jaśniejszy przy najechaniu */
+            border-color: #adadad;
+        }
+        QPushButton:pressed {
+            background-color: #dcdcdc; /* Ciemniejszy przy wciśnięciu */
+            border-color: #999;
+        }
+        QLineEdit, QComboBox, QTextEdit, QListWidget { 
+            padding: 4px; 
+            border-radius: 4px; 
+            border: 1px solid #ccc;
+        }
+        QComboBox::drop-down {
+            border-left: 1px solid #ccc; /* Linia oddzielająca strzałkę */
+            border-top-right-radius: 3px; /* Zaokrąglenie pasujące do widgetu */
+            border-bottom-right-radius: 3px;
+        }
+        QComboBox::down-arrow {
+            /* Można tu wstawić własną ikonę strzałki, jeśli standardowa nie pasuje */
+            /* image: url(path/to/your/arrow-down.png); */
+            /* width: 12px; */
+            /* height: 12px; */
+        }
+        QProgressBar {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center; /* Tekst procentowy na środku */
+        }
+        QProgressBar::chunk {
+            background-color: #0078d7; /* Kolor paska postępu */
+            border-radius: 3px; /* Lekkie zaokrąglenie samego paska */
+        }
+        """
+        self.setStyleSheet(qss_style_string)
+
     def load_settings_to_ui(self):
         """Załaduj ustawienia z pliku do kontrolek UI"""
         self.max_size_input.setText(self.settings.get("max_size", ""))
@@ -129,7 +222,7 @@ class ImageConverterGUI(QMainWindow):
         self.drop_area.filesDropped.connect(self.handle_dropped_files)
         file_layout.addWidget(self.drop_area)
         
-        main_layout.addWidget(file_group)
+        # main_layout.addWidget(file_group) # Zostanie dodane do splittera
         
         # ==== SEKCJA OPCJI KONWERSJI ====
         options_group = QGroupBox("Opcje konwersji")
@@ -195,7 +288,7 @@ class ImageConverterGUI(QMainWindow):
         self.strip_metadata_check = QCheckBox("Usuń metadane (EXIF, ICC, etc.)")
         options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3) # Zmieniono span na 3
 
-        main_layout.addWidget(options_group)
+        # main_layout.addWidget(options_group) # Zostanie dodane do splittera
         
         # ==== PRZYCISKI AKCJI ====
         action_layout = QHBoxLayout()
@@ -209,13 +302,13 @@ class ImageConverterGUI(QMainWindow):
         convert_btn.clicked.connect(self.start_conversion)
         action_layout.addWidget(convert_btn)
         
-        main_layout.addLayout(action_layout)
+        # main_layout.addLayout(action_layout) # Zostanie dodane do top_layout w splitterze
         
         # ==== PASEK POSTĘPU ====
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        main_layout.addWidget(self.progress_bar)
+        # main_layout.addWidget(self.progress_bar) # Zostanie dodane do top_layout w splitterze
         
         # ==== LOG DZIAŁAŃ ====
         log_group = QGroupBox("Log Działań")
@@ -226,13 +319,36 @@ class ImageConverterGUI(QMainWindow):
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
         
-        main_layout.addWidget(log_group)
+        # main_layout.addWidget(log_group) # Zostanie dodane do splittera
+
+        # ==== Konfiguracja Splittera ====
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # Górny panel dla file_group, options_group, action_layout, progress_bar
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        top_layout.addWidget(file_group)
+        top_layout.addWidget(options_group)
+        top_layout.addLayout(action_layout)
+        top_layout.addWidget(self.progress_bar)
+        # top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
+
+        main_splitter.addWidget(top_widget)
+        main_splitter.addWidget(log_group) # log_group bezpośrednio do splittera
+
+        # Ustawienie początkowych rozmiarów splittera (dostosuj wartości wg potrzeb)
+        # Można użyć proporcji okna, ale na start stałe wartości mogą być łatwiejsze
+        # self.resize(700, 650) # Zakładając, że to jest rozmiar okna
+        main_splitter.setSizes([400, 250]) # Daje więcej miejsca górnemu panelowi
+
+        # Dodaj główny splitter do main_layout
+        main_layout.addWidget(main_splitter)
         
-        # Ustaw proporcje
-        main_layout.setStretch(0, 3)  # File section
-        main_layout.setStretch(1, 0)  # Options
-        main_layout.setStretch(3, 0)  # Progress
-        main_layout.setStretch(4, 2)  # Log
+        # Usuń stare ustawienia stretch, QSplitter zarządza tym teraz
+        # main_layout.setStretch(0, 3)
+        # main_layout.setStretch(1, 0)
+        # main_layout.setStretch(3, 0)
+        # main_layout.setStretch(4, 2)
 
     def update_webp_lossless_check_state(self, current_format_text=None):
         """Aktualizuje stan checkboxa WebP lossless na podstawie wybranego formatu."""
@@ -354,6 +470,9 @@ class ImageConverterGUI(QMainWindow):
             "strip_metadata": self.strip_metadata_check.isChecked(),
             "webp_lossless": self.webp_lossless_check.isChecked()
         }
+        
+        # Zapisz geometrię okna
+        settings["window_geometry"] = self.saveGeometry().toBase64().data().decode('utf-8')
         
         self.config_manager.save_settings(settings)
         QMessageBox.information(self, "Informacja", "Ustawienia zostały zapisane")
