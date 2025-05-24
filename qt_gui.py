@@ -110,42 +110,29 @@ class ImageConverterGUI(QMainWindow):
     def toggle_options_visibility(self, is_checked):
         """Pokazuje lub ukrywa kontener opcji oraz dostosowuje rozmiar okna."""
         
-        # a. Pobierz starą wysokość kontenera opcji
-        old_height = self.options_container_widget.height() if self.options_container_widget.isVisible() else 0
+        # a. Zapisz starą wysokość całego QGroupBox "Opcje konwersji"
+        old_group_height = self.options_group.height()
         
-        # Ustaw widoczność kontenera
+        # Ustaw widoczność wewnętrznego kontenera
         self.options_container_widget.setVisible(is_checked)
         
-        # Poinformuj layout o zmianie geometrii (istniejące wywołania)
-        self.options_container_widget.updateGeometry()
-        if hasattr(self, 'top_widget'): # Upewnij się, że top_widget istnieje
-             self.top_widget.updateGeometry() # To pomaga splitterowi przeliczyć dostępne miejsce
+        # Poinformuj layout o zmianie geometrii
+        self.options_container_widget.updateGeometry() # Aktualizuje sizeHint kontenera
+        self.options_group.adjustSize() # Nakazuje QGroupBox dostosować swój rozmiar do zawartości
+        if hasattr(self, 'top_widget'): 
+             self.top_widget.updateGeometry() # Aktualizuje layout rodzica w splitterze
 
         # Wymuś przetworzenie zdarzeń, aby widgety miały czas na aktualizację swojej geometrii
-        # To może być potrzebne, aby sizeHint() zwróciło poprawną wartość po setVisible(True)
         QApplication.processEvents()
 
-        # b. Pobierz nową wysokość kontenera opcji
-        if is_checked:
-            # Po pokazaniu, sizeHint() powinno dać preferowaną wysokość
-            # Można też użyć self.options_container_widget.layout().sizeHint().height() jeśli widget nie ma własnego sizeHint
-            new_height = self.options_container_widget.sizeHint().height()
-            # Czasem layout potrzebuje więcej miejsca niż sam widget, więc bierzemy pod uwagę też geometrię
-            # Jeśli layout jest pusty, sizeHint może być małe, ale geometria odzwierciedli marginesy layoutu
-            # Użycie geometrii może być bardziej stabilne, jeśli sizeHint jest nieprzewidywalne
-            actual_new_geometry_height = self.options_container_widget.height()
-            if actual_new_geometry_height > new_height : # jeśli geometria jest większa (np. przez marginesy layoutu)
-                new_height = actual_new_geometry_height
-
-        else:
-            # Po ukryciu, efektywna wysokość to 0
-            new_height = 0
+        # d. Pobierz nową wysokość całego QGroupBox
+        new_group_height = self.options_group.height()
             
-        # c. Oblicz delta_height
-        delta_height = new_height - old_height
+        # c. Oblicz delta_height na podstawie zmiany wysokości QGroupBox
+        delta_height = new_group_height - old_group_height
         
         # d. Zmień rozmiar głównego okna, jeśli delta jest znacząca
-        if abs(delta_height) > 5: # Mała tolerancja, aby uniknąć niepotrzebnych zmian rozmiaru
+        if abs(delta_height) > 1: # Mniejsza tolerancja, bo adjustSize może być bardziej precyzyjne
             current_window_height = self.height()
             target_window_height = current_window_height + delta_height
             
@@ -306,6 +293,7 @@ class ImageConverterGUI(QMainWindow):
         # ==== SEKCJA OPCJI KONWERSJI ====
         self.options_group = QGroupBox("Opcje konwersji") # Zmieniono na self.options_group
         self.options_group.setCheckable(True) # Umożliwia zwijanie
+        self.options_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         
         # Kontener na wszystkie opcje wewnątrz QGroupBox
         self.options_container_widget = QWidget()
