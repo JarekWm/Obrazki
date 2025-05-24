@@ -23,14 +23,21 @@ class DropArea(QLabel):
         self.setMinimumHeight(100)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setAcceptDrops(True)
-    
+        self.original_style_sheet = self.styleSheet() # Zapisz oryginalny styl
+
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.accept()
+            self.setStyleSheet("background-color: lightblue;") # Podświetlenie
         else:
             event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """Przywraca styl po opuszczeniu obszaru przez kursor."""
+        self.setStyleSheet(self.original_style_sheet) # Przywróć oryginalny styl
     
     def dropEvent(self, event: QDropEvent):
+        self.setStyleSheet(self.original_style_sheet) # Przywróć oryginalny styl po upuszczeniu
         if event.mimeData().hasUrls():
             file_paths = []
             for url in event.mimeData().urls():
@@ -81,6 +88,10 @@ class ImageConverterGUI(QMainWindow):
             
         self.output_dir_input.setText(self.settings.get("output_directory", ""))
         self.delete_originals_check.setChecked(self.settings.get("delete_originals", False))
+        self.strip_metadata_check.setChecked(self.settings.get("strip_metadata", False))
+        self.webp_lossless_check.setChecked(self.settings.get("webp_lossless", False))
+        # Upewnij się, że stan checkboxa WebP lossless jest poprawny po załadowaniu
+        self.update_webp_lossless_check_state()
     
     def create_widgets(self):
         """Utwórz wszystkie widgety interfejsu użytkownika"""
@@ -102,9 +113,17 @@ class ImageConverterGUI(QMainWindow):
         file_header_layout.addStretch()
         file_layout.addLayout(file_header_layout)
         
-        # Lista wybranych plików
+        # Lista wybranych plików - teraz w trybie ikon
         self.file_list = QListWidget()
-        self.file_list.setMaximumHeight(80)
+        self.file_list.setViewMode(QListWidget.ViewMode.IconMode)
+        self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Ikony będą się układać
+        self.file_list.setMovement(QListWidget.Movement.Static)    # Elementy nieprzesuwalne
+        self.file_list.setIconSize(Qt.QSize(64, 64)) # Przykładowy rozmiar ikony
+        self.file_list.setGridSize(Qt.QSize(80, 80)) # Przykładowy rozmiar komórki siatki
+        # Zamiast setMaximumHeight, umieścimy ją w QScrollArea, jeśli potrzebne
+        # Na razie zostawiamy bez QScrollArea dla prostoty, zobaczymy jak się zachowuje.
+        # Jeśli będzie za dużo plików, QListWidget sam powinien dodać paski przewijania.
+        # self.file_list.setMaximumHeight(150) # Zwiększamy trochę wysokość na razie
         file_layout.addWidget(self.file_list)
         
         # Obszar do przeciągania i upuszczania
@@ -124,6 +143,12 @@ class ImageConverterGUI(QMainWindow):
         self.format_combo = QComboBox()
         self.format_combo.addItems(self.converter.get_available_formats())
         options_layout.addWidget(self.format_combo, 0, 1)
+
+        # Opcja WebP lossless
+        self.webp_lossless_check = QCheckBox("WebP bezstratny")
+        options_layout.addWidget(self.webp_lossless_check, 0, 2) # Obok formatu
+        self.format_combo.currentTextChanged.connect(self.update_webp_lossless_check_state)
+        self.update_webp_lossless_check_state() # Ustaw stan początkowy zaraz po utworzeniu widgetu
         
         # Maksymalny rozmiar
         options_layout.addWidget(QLabel("Maksymalny rozmiar (KB):"), 1, 0)
@@ -166,8 +191,12 @@ class ImageConverterGUI(QMainWindow):
         
         # Opcja usuwania oryginałów
         self.delete_originals_check = QCheckBox("Usuń oryginalne pliki po udanej konwersji")
-        options_layout.addWidget(self.delete_originals_check, 6, 0, 1, 4)
+        options_layout.addWidget(self.delete_originals_check, 6, 0, 1, 3) # Zmieniono span na 3
         
+        # Opcja usuwania metadanych
+        self.strip_metadata_check = QCheckBox("Usuń metadane (EXIF, ICC, etc.)")
+        options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3) # Zmieniono span na 3
+
         main_layout.addWidget(options_group)
         
         # ==== PRZYCISKI AKCJI ====
@@ -206,6 +235,17 @@ class ImageConverterGUI(QMainWindow):
         main_layout.setStretch(1, 0)  # Options
         main_layout.setStretch(3, 0)  # Progress
         main_layout.setStretch(4, 2)  # Log
+
+    def update_webp_lossless_check_state(self, current_format_text=None):
+        """Aktualizuje stan checkboxa WebP lossless na podstawie wybranego formatu."""
+        if current_format_text is None:
+            current_format_text = self.format_combo.currentText()
+        
+        if current_format_text == "WebP":
+            self.webp_lossless_check.setEnabled(True)
+        else:
+            self.webp_lossless_check.setEnabled(False)
+            self.webp_lossless_check.setChecked(False) # Odznacz, jeśli nie WebP
     
     def log_message(self, message):
         """Dodaje wiadomość do pola logu."""
@@ -250,8 +290,16 @@ class ImageConverterGUI(QMainWindow):
         
         self.selected_files = files_to_add
         self.file_list.clear()
-        for file in files_to_add:
-            self.file_list.addItem(os.path.basename(file))
+        
+        # Import QStyle wewnątrz metody, aby uniknąć problemów z importem na poziomie modułu, jeśli nie jest używane
+        from PyQt6.QtWidgets import QStyle, QListWidgetItem
+
+        for file_path in files_to_add:
+            item = QListWidgetItem(os.path.basename(file_path))
+            # Użyj standardowej ikony pliku
+            icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+            item.setIcon(icon)
+            self.file_list.addItem(item)
         
         loaded_filenames = [os.path.basename(f) for f in files_to_add]
         self.log_message(f"Dodano pliki ({len(loaded_filenames)}): {', '.join(loaded_filenames)}")
@@ -304,7 +352,9 @@ class ImageConverterGUI(QMainWindow):
             "suffix": self.suffix_input.text(),
             "output_format": self.format_combo.currentText(),
             "output_directory": self.output_dir_input.text(),
-            "delete_originals": self.delete_originals_check.isChecked()
+            "delete_originals": self.delete_originals_check.isChecked(),
+            "strip_metadata": self.strip_metadata_check.isChecked(),
+            "webp_lossless": self.webp_lossless_check.isChecked()
         }
         
         self.config_manager.save_settings(settings)
@@ -420,13 +470,20 @@ class ImageConverterGUI(QMainWindow):
                     
                     # Obliczenie nowych wymiarów
                     new_dimensions = self.calculate_dimensions(orig_width, orig_height)
+
+                strip_metadata_option = self.strip_metadata_check.isChecked()
+                webp_lossless_option = False
+                if self.format_combo.currentText() == "WebP" and self.webp_lossless_check.isEnabled() and self.webp_lossless_check.isChecked():
+                    webp_lossless_option = True
                 
                 self.converter.convert_heic_to_format(
                     image_path, 
                     output_file,
                     output_format=output_format,
                     max_size_kb=max_size, 
-                    new_resolution=new_dimensions
+                    new_resolution=new_dimensions,
+                    strip_metadata=strip_metadata_option,
+                    webp_lossless=webp_lossless_option
                 )
                 
                 self.log_message(f" -> Zapisano jako: {os.path.basename(output_file)}")
