@@ -12,7 +12,7 @@ class FileManager:
             "GIF": "gif"
         }
     
-    def generate_output_filename(self, input_path, output_format="JPEG", suffix="_converted", output_directory=None):
+    def generate_output_filename(self, input_path, output_format="JPEG", suffix="_converted", output_directory=None, number_prefix: str = None):
         """
         Generuje nazwę pliku wyjściowego na podstawie nazwy pliku wejściowego HEIC
         
@@ -21,6 +21,7 @@ class FileManager:
             output_format (str): Format wyjściowy (JPEG, PNG, BMP, TIFF, WebP, GIF)
             suffix (str): Sufiks do dodania przed rozszerzeniem
             output_directory (str, optional): Katalog wyjściowy, jeśli jest inny niż katalog pliku wejściowego
+            number_prefix (str, optional): Prefiks numeryczny do dodania na początku nazwy pliku.
             
         Returns:
             str: Ścieżka do pliku wyjściowego
@@ -34,7 +35,8 @@ class FileManager:
         extension = self.format_extensions.get(output_format, "jpg")
         
         # Utwórz nową nazwę pliku z sufiksem i rozszerzeniem
-        new_filename = f"{name}{suffix}.{extension}"
+        prefix_to_use = number_prefix if number_prefix else ""
+        new_filename = f"{prefix_to_use}{name}{suffix}.{extension}"
         
         # Jeśli podano katalog wyjściowy i istnieje, użyj go
         if output_directory and os.path.isdir(output_directory):

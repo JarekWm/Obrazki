@@ -183,6 +183,7 @@ class ImageConverterGUI(QMainWindow):
         self.delete_originals_check.setChecked(self.settings.get("delete_originals", False))
         self.strip_metadata_check.setChecked(self.settings.get("strip_metadata", False))
         self.webp_lossless_check.setChecked(self.settings.get("webp_lossless", False))
+        self.number_output_files_check.setChecked(self.settings.get("number_output_files", False))
         # Upewnij się, że stan checkboxa WebP lossless jest poprawny po załadowaniu
         self.update_webp_lossless_check_state()
     
@@ -206,15 +207,19 @@ class ImageConverterGUI(QMainWindow):
         file_header_layout.addStretch()
         file_layout.addLayout(file_header_layout)
         
-        # Lista wybranych plików - teraz w trybie listy
+        # Lista wybranych plików - teraz w trybie wielokolumnowym IconMode
         self.file_list = QListWidget()
-        self.file_list.setViewMode(QListWidget.ViewMode.ListMode) # Zmiana na ListMode
-        self.file_list.setIconSize(QSize(22, 22)) # Mniejsze ikony dla trybu listy
-        self.file_list.setWordWrap(True) # Włącz zawijanie tekstu
-        # self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Niepotrzebne dla ListMode
-        # self.file_list.setMovement(QListWidget.Movement.Static) # Niepotrzebne dla ListMode
-        # self.file_list.setGridSize(QSize(80, 60)) # Niepotrzebne dla ListMode
-        # QListWidget sam powinien dodać paski przewijania, jeśli potrzeba.
+        self.file_list.setViewMode(QListWidget.ViewMode.IconMode)      # Powrót do IconMode
+        self.file_list.setFlow(QListWidget.Flow.LeftToRight)       # Przepływ od lewej do prawej
+        self.file_list.setWrapping(True)                           # Zawijanie elementów
+        self.file_list.setIconSize(QSize(16, 16))                  # Małe ikony
+        self.file_list.setGridSize(QSize(200, 40))                 # Rozmiar komórki (szerokość, wysokość)
+        # self.file_list.setWordWrap(True) # Ta właściwość QListWidget nie kontroluje zawijania tekstu w QListWidgetItem w IconMode
+        
+        # Właściwości dla IconMode
+        self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Dostosuj układ przy zmianie rozmiaru
+        self.file_list.setMovement(QListWidget.Movement.Static)    # Elementy nieprzesuwalne
+
         file_layout.addWidget(self.file_list)
         
         # Obszar do przeciągania i upuszczania
@@ -286,7 +291,11 @@ class ImageConverterGUI(QMainWindow):
         
         # Opcja usuwania metadanych
         self.strip_metadata_check = QCheckBox("Usuń metadane (EXIF, ICC, etc.)")
-        options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3) # Zmieniono span na 3
+        options_layout.addWidget(self.strip_metadata_check, 7, 0, 1, 3)
+        
+        # Opcja numerowania plików wynikowych
+        self.number_output_files_check = QCheckBox("Numeruj pliki wynikowe (np. 01_nazwa.jpg)")
+        options_layout.addWidget(self.number_output_files_check, 8, 0, 1, 3)
 
         # main_layout.addWidget(options_group) # Zostanie dodane do splittera
         
@@ -393,14 +402,9 @@ class ImageConverterGUI(QMainWindow):
             )
     
     def process_selected_files(self, files):
-        """Przetwarzanie wybranych plików z limitem do 5."""
-        # Limit do 5 plików
-        files_to_add = files[:5]
-        if len(files) > 5:
-            QMessageBox.warning(
-                self, "Limit plików", 
-                "Wybrano więcej niż 5 plików. Tylko pierwsze 5 zostanie dodanych."
-            )
+        """Przetwarzanie wybranych plików (bez limitu)."""
+        # Nie ma już limitu, więc bierzemy wszystkie pliki
+        files_to_add = files 
         
         self.selected_files = files_to_add
         self.file_list.clear()
@@ -468,7 +472,8 @@ class ImageConverterGUI(QMainWindow):
             "output_directory": self.output_dir_input.text(),
             "delete_originals": self.delete_originals_check.isChecked(),
             "strip_metadata": self.strip_metadata_check.isChecked(),
-            "webp_lossless": self.webp_lossless_check.isChecked()
+            "webp_lossless": self.webp_lossless_check.isChecked(),
+            "number_output_files": self.number_output_files_check.isChecked()
         }
         
         # Zapisz geometrię okna
@@ -548,6 +553,9 @@ class ImageConverterGUI(QMainWindow):
         output_format = self.format_combo.currentText()
         output_dir = self.output_dir_input.text()
         
+        number_files_option = self.number_output_files_check.isChecked()
+        file_counter = 1 # Zainicjuj licznik dla partii plików
+        
         # Sprawdź i utwórz katalog wyjściowy, jeśli podano
         if output_dir:
             try:
@@ -572,11 +580,16 @@ class ImageConverterGUI(QMainWindow):
         
         for i, image_path in enumerate(self.selected_files):
             try:
+                current_number_prefix = None
+                if number_files_option:
+                    current_number_prefix = f"{file_counter:02d}_" # Format dwucyfrowy z podkreślnikiem
+
                 output_file = self.file_manager.generate_output_filename(
                     image_path, 
                     output_format, 
                     suffix,
-                    output_directory=output_dir
+                    output_directory=output_dir,
+                    number_prefix=current_number_prefix # NOWY ARGUMENT
                 )
                 self.log_message(f"Konwertowanie: {os.path.basename(image_path)}...")
                 QApplication.processEvents()  # Aktualizacja UI
@@ -618,6 +631,9 @@ class ImageConverterGUI(QMainWindow):
                 progress_value = int((i + 1) / total_files * 100)
                 self.progress_bar.setValue(progress_value)
                 QApplication.processEvents()  # Aktualizacja UI
+
+                if number_files_option:
+                    file_counter += 1
                 
             except Exception as e:
                 self.log_message(f"BŁĄD konwersji pliku {os.path.basename(image_path)}: {str(e)}")
