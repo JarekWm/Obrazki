@@ -113,17 +113,15 @@ class ImageConverterGUI(QMainWindow):
         file_header_layout.addStretch()
         file_layout.addLayout(file_header_layout)
         
-        # Lista wybranych plików - teraz w trybie ikon
+        # Lista wybranych plików - teraz w trybie listy
         self.file_list = QListWidget()
-        self.file_list.setViewMode(QListWidget.ViewMode.IconMode)
-        self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Ikony będą się układać
-        self.file_list.setMovement(QListWidget.Movement.Static)    # Elementy nieprzesuwalne
-        self.file_list.setIconSize(QSize(64, 64)) # Przykładowy rozmiar ikony
-        self.file_list.setGridSize(QSize(80, 80)) # Przykładowy rozmiar komórki siatki
-        # Zamiast setMaximumHeight, umieścimy ją w QScrollArea, jeśli potrzebne
-        # Na razie zostawiamy bez QScrollArea dla prostoty, zobaczymy jak się zachowuje.
-        # Jeśli będzie za dużo plików, QListWidget sam powinien dodać paski przewijania.
-        # self.file_list.setMaximumHeight(150) # Zwiększamy trochę wysokość na razie
+        self.file_list.setViewMode(QListWidget.ViewMode.ListMode) # Zmiana na ListMode
+        self.file_list.setIconSize(QSize(22, 22)) # Mniejsze ikony dla trybu listy
+        self.file_list.setWordWrap(True) # Włącz zawijanie tekstu
+        # self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Niepotrzebne dla ListMode
+        # self.file_list.setMovement(QListWidget.Movement.Static) # Niepotrzebne dla ListMode
+        # self.file_list.setGridSize(QSize(80, 60)) # Niepotrzebne dla ListMode
+        # QListWidget sam powinien dodać paski przewijania, jeśli potrzeba.
         file_layout.addWidget(self.file_list)
         
         # Obszar do przeciągania i upuszczania
