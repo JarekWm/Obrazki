@@ -107,6 +107,10 @@ class ImageConverterGUI(QMainWindow):
             
         self.apply_app_styles()
 
+    def toggle_options_visibility(self, is_checked):
+        """Pokazuje lub ukrywa kontener opcji w zależności od stanu checkboxa QGroupBox."""
+        self.options_container_widget.setVisible(is_checked)
+
     def apply_app_styles(self):
         qss_style_string = """
         QGroupBox { 
