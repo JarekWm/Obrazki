@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QLabel, QPushButton, QFileDialog, QListWidget, QFrame, 
                             QProgressBar, QTextEdit, QComboBox, QLineEdit, QCheckBox,
                             QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea)
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from config import ConfigManager
 from file_manager import FileManager
@@ -118,8 +118,8 @@ class ImageConverterGUI(QMainWindow):
         self.file_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.file_list.setResizeMode(QListWidget.ResizeMode.Adjust) # Ikony będą się układać
         self.file_list.setMovement(QListWidget.Movement.Static)    # Elementy nieprzesuwalne
-        self.file_list.setIconSize(Qt.QSize(64, 64)) # Przykładowy rozmiar ikony
-        self.file_list.setGridSize(Qt.QSize(80, 80)) # Przykładowy rozmiar komórki siatki
+        self.file_list.setIconSize(QSize(64, 64)) # Przykładowy rozmiar ikony
+        self.file_list.setGridSize(QSize(80, 80)) # Przykładowy rozmiar komórki siatki
         # Zamiast setMaximumHeight, umieścimy ją w QScrollArea, jeśli potrzebne
         # Na razie zostawiamy bez QScrollArea dla prostoty, zobaczymy jak się zachowuje.
         # Jeśli będzie za dużo plików, QListWidget sam powinien dodać paski przewijania.
