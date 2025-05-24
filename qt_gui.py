@@ -184,6 +184,15 @@ class ImageConverterGUI(QMainWindow):
         self.strip_metadata_check.setChecked(self.settings.get("strip_metadata", False))
         self.webp_lossless_check.setChecked(self.settings.get("webp_lossless", False))
         self.number_output_files_check.setChecked(self.settings.get("number_output_files", False))
+        
+        # Wczytaj i zastosuj stan zwinięcia QGroupBox "Opcje konwersji"
+        options_expanded = self.settings.get('options_group_expanded', True) # Domyślnie rozwinięte
+        self.options_group.setChecked(options_expanded)
+        # Bezpośrednie ustawienie widoczności kontenera, ponieważ toggle_options_visibility jest podłączone do sygnału toggled,
+        # a setChecked programistycznie niekoniecznie emituje ten sygnał w taki sam sposób jak kliknięcie użytkownika
+        # (lub chcemy uniknąć potencjalnego podwójnego wywołania lub problemów z timingiem).
+        self.options_container_widget.setVisible(options_expanded)
+
         # Upewnij się, że stan checkboxa WebP lossless jest poprawny po załadowaniu
         self.update_webp_lossless_check_state()
     
@@ -230,10 +239,21 @@ class ImageConverterGUI(QMainWindow):
         # main_layout.addWidget(file_group) # Zostanie dodane do splittera
         
         # ==== SEKCJA OPCJI KONWERSJI ====
-        options_group = QGroupBox("Opcje konwersji")
-        options_layout = QGridLayout()
-        options_group.setLayout(options_layout)
+        self.options_group = QGroupBox("Opcje konwersji") # Zmieniono na self.options_group
+        self.options_group.setCheckable(True) # Umożliwia zwijanie
         
+        # Kontener na wszystkie opcje wewnątrz QGroupBox
+        self.options_container_widget = QWidget()
+        options_layout = QGridLayout(self.options_container_widget) # Istniejący layout przypisany do kontenera
+        # self.options_container_widget.setLayout(options_layout) # Już zrobione przez konstruktor QGridLayout
+
+        # Główny layout dla QGroupBox, który będzie zawierał kontener
+        options_group_main_layout = QVBoxLayout(self.options_group) # Layout dla self.options_group
+        options_group_main_layout.addWidget(self.options_container_widget)
+        # self.options_group.setLayout(options_group_main_layout) # Już zrobione przez konstruktor QVBoxLayout
+        
+        self.options_group.toggled.connect(self.toggle_options_visibility)
+
         # Format wyjściowy
         options_layout.addWidget(QLabel("Format wyjściowy:"), 0, 0)
         self.format_combo = QComboBox()
@@ -337,7 +357,7 @@ class ImageConverterGUI(QMainWindow):
         top_widget = QWidget()
         top_layout = QVBoxLayout(top_widget)
         top_layout.addWidget(file_group)
-        top_layout.addWidget(options_group)
+        top_layout.addWidget(self.options_group) # Użyj self.options_group
         top_layout.addLayout(action_layout)
         top_layout.addWidget(self.progress_bar)
         # top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
@@ -478,6 +498,8 @@ class ImageConverterGUI(QMainWindow):
         
         # Zapisz geometrię okna
         settings["window_geometry"] = self.saveGeometry().toBase64().data().decode('utf-8')
+        # Zapisz stan zwinięcia QGroupBox "Opcje konwersji"
+        settings['options_group_expanded'] = self.options_group.isChecked()
         
         self.config_manager.save_settings(settings)
         QMessageBox.information(self, "Informacja", "Ustawienia zostały zapisane")
