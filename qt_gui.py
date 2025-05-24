@@ -418,8 +418,7 @@ class ImageConverterGUI(QMainWindow):
         file_group = QGroupBox("Wybór plików")
         file_layout = QVBoxLayout()
         file_group.setLayout(file_layout)
-        file_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        file_group.setFixedHeight(230) # Stała wysokość dla sekcji plików (zwiększona z 180/200)
+        file_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         
         # Przycisk wyboru plików i lista
         file_header_layout = QHBoxLayout()
