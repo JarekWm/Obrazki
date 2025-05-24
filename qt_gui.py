@@ -455,9 +455,16 @@ class ImageConverterGUI(QMainWindow):
         
         self.options_button = QPushButton("Opcje konwersji...")
         self.options_button.clicked.connect(self.open_options_dialog)
-        # Dodajemy przycisk opcji do top_layout, np. przed przyciskami akcji
-        # lub w miejscu gdzie był options_group. Zależy od preferencji układu.
-        # Na razie dodamy go jako część top_widget, tak jak był options_group.
+
+        self.open_output_dir_button = QPushButton("Otwórz katalog docelowy")
+        # Połączenie sygnału dla self.open_output_dir_button zostanie dodane w innym miejscu,
+        # np. w self.connect_signals() lub bezpośrednio po utworzeniu, jeśli metoda open_output_directory już istnieje.
+        self.open_output_dir_button.clicked.connect(self.open_target_directory_explorer)
+
+        options_and_open_dir_layout = QHBoxLayout()
+        options_and_open_dir_layout.addWidget(self.options_button)
+        options_and_open_dir_layout.addWidget(self.open_output_dir_button)
+        options_and_open_dir_layout.addStretch() # Dodaje rozciągliwą przestrzeń na prawo od przycisków
 
         # ==== PRZYCISKI AKCJI ====
         action_layout = QHBoxLayout() # Ten layout będzie teraz zawierał tylko "Zapisz ustawienia" i "Konwertuj"
@@ -501,7 +508,7 @@ class ImageConverterGUI(QMainWindow):
         top_layout = QVBoxLayout(self.top_widget) # Użyj self.top_widget
         top_layout.addWidget(file_group)
         # top_layout.addWidget(self.options_group) # Usunięto stary options_group
-        top_layout.addWidget(self.options_button) # Dodano przycisk opcji
+        top_layout.addLayout(options_and_open_dir_layout) # Dodano layout z przyciskami opcji i otwierania katalogu
         top_layout.addLayout(action_layout)
         top_layout.addWidget(self.progress_bar)
         # self.top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
@@ -591,20 +598,51 @@ class ImageConverterGUI(QMainWindow):
             self.output_dir_input.setText(directory)
             self.log_message(f"Ustawiono katalog wyjściowy: {directory}")
     
+    def open_target_directory_explorer(self):
+        """Otwiera skonfigurowany katalog docelowy w eksploratorze plików systemowych."""
+        output_dir = self.settings.get('output_directory', '')
+
+        if not output_dir:
+            self.log_message("Katalog docelowy nie jest ustawiony.")
+            QMessageBox.information(self, "Informacja", "Katalog docelowy nie jest ustawiony. Proszę ustawić go w opcjach.")
+            return
+
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            self.log_message(f"Upewniono się, że katalog docelowy istnieje: {output_dir}")
+        except Exception as e:
+            self.log_message(f"Błąd podczas tworzenia katalogu docelowego '{output_dir}': {e}")
+            QMessageBox.warning(self, "Błąd", f"Nie można utworzyć katalogu docelowego: {e}")
+            return
+
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(output_dir)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.Popen(['open', output_dir])
+            else:  # Linux and other POSIX
+                subprocess.Popen(['xdg-open', output_dir])
+            self.log_message(f"Otwarto katalog docelowy w eksploratorze: {output_dir}")
+        except Exception as e:
+            self.log_message(f"Błąd przy otwieraniu katalogu docelowego '{output_dir}': {e}")
+            QMessageBox.warning(self, "Błąd", f"Nie można otworzyć katalogu: {e}")
+
     def open_output_directory(self):
         """Otwiera katalog wyjściowy w Eksploratorze plików."""
-        directory = self.output_dir_input.text()
+        directory = self.output_dir_input.text() # This method seems to be using a direct input, not settings.
+                                                 # Keeping it as is, maybe it's used by something else.
+                                                 # The new method open_target_directory_explorer uses self.settings.
         
         if not directory:
-            self.log_message("Nie ustawiono katalogu wyjściowego.")
+            self.log_message("Nie ustawiono katalogu wyjściowego (z pola input).") # Clarified log
             return
             
         if not os.path.exists(directory):
             try:
                 os.makedirs(directory)
-                self.log_message(f"Utworzono katalog wyjściowy: {directory}")
+                self.log_message(f"Utworzono katalog wyjściowy (z pola input): {directory}") # Clarified log
             except Exception as e:
-                self.log_message(f"Nie można utworzyć katalogu wyjściowego: {str(e)}")
+                self.log_message(f"Nie można utworzyć katalogu wyjściowego (z pola input): {str(e)}") # Clarified log
                 return
         
         try:
@@ -616,9 +654,9 @@ class ImageConverterGUI(QMainWindow):
                     subprocess.Popen(['open', directory])
                 else:  # Linux
                     subprocess.Popen(['xdg-open', directory])
-            self.log_message(f"Otwarto katalog wyjściowy: {directory}")
+            self.log_message(f"Otwarto katalog wyjściowy (z pola input): {directory}") # Clarified log
         except Exception as e:
-            self.log_message(f"Błąd przy otwieraniu katalogu: {str(e)}")
+            self.log_message(f"Błąd przy otwieraniu katalogu (z pola input): {str(e)}") # Clarified log
     
     def save_settings(self):
         """Zapisuje ustawienia do pliku konfiguracyjnego."""
