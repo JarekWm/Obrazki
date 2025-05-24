@@ -5,7 +5,7 @@ from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QFileDialog, QListWidget, QFrame, 
                             QProgressBar, QTextEdit, QComboBox, QLineEdit, QCheckBox,
-                            QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea)
+                            QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize, QByteArray
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from config import ConfigManager
@@ -108,8 +108,59 @@ class ImageConverterGUI(QMainWindow):
         self.apply_app_styles()
 
     def toggle_options_visibility(self, is_checked):
-        """Pokazuje lub ukrywa kontener opcji w zależności od stanu checkboxa QGroupBox."""
+        """Pokazuje lub ukrywa kontener opcji oraz dostosowuje rozmiar okna."""
+        
+        # a. Pobierz starą wysokość kontenera opcji
+        old_height = self.options_container_widget.height() if self.options_container_widget.isVisible() else 0
+        
+        # Ustaw widoczność kontenera
         self.options_container_widget.setVisible(is_checked)
+        
+        # Poinformuj layout o zmianie geometrii (istniejące wywołania)
+        self.options_container_widget.updateGeometry()
+        if hasattr(self, 'top_widget'): # Upewnij się, że top_widget istnieje
+             self.top_widget.updateGeometry() # To pomaga splitterowi przeliczyć dostępne miejsce
+
+        # Wymuś przetworzenie zdarzeń, aby widgety miały czas na aktualizację swojej geometrii
+        # To może być potrzebne, aby sizeHint() zwróciło poprawną wartość po setVisible(True)
+        QApplication.processEvents()
+
+        # b. Pobierz nową wysokość kontenera opcji
+        if is_checked:
+            # Po pokazaniu, sizeHint() powinno dać preferowaną wysokość
+            # Można też użyć self.options_container_widget.layout().sizeHint().height() jeśli widget nie ma własnego sizeHint
+            new_height = self.options_container_widget.sizeHint().height()
+            # Czasem layout potrzebuje więcej miejsca niż sam widget, więc bierzemy pod uwagę też geometrię
+            # Jeśli layout jest pusty, sizeHint może być małe, ale geometria odzwierciedli marginesy layoutu
+            # Użycie geometrii może być bardziej stabilne, jeśli sizeHint jest nieprzewidywalne
+            actual_new_geometry_height = self.options_container_widget.height()
+            if actual_new_geometry_height > new_height : # jeśli geometria jest większa (np. przez marginesy layoutu)
+                new_height = actual_new_geometry_height
+
+        else:
+            # Po ukryciu, efektywna wysokość to 0
+            new_height = 0
+            
+        # c. Oblicz delta_height
+        delta_height = new_height - old_height
+        
+        # d. Zmień rozmiar głównego okna, jeśli delta jest znacząca
+        if abs(delta_height) > 5: # Mała tolerancja, aby uniknąć niepotrzebnych zmian rozmiaru
+            current_window_height = self.height()
+            target_window_height = current_window_height + delta_height
+            
+            # Upewnij się, że nowy rozmiar nie jest mniejszy niż minimalny
+            min_h = self.minimumSizeHint().height() 
+            # self.minimumHeight() może być bardziej odpowiednie, jeśli zostało jawnie ustawione
+            # W naszym przypadku self.setMinimumSize(700, 650) ustawia minimumHeight() na 650
+            if self.minimumHeight() > min_h:
+                min_h = self.minimumHeight()
+
+            final_window_height = max(min_h, target_window_height)
+            
+            self.resize(self.width(), final_window_height)
+            # self.log_message(f"Zmiana wysokości okna o: {delta_height}, stara_kont: {old_height}, nowa_kont: {new_height}, okno: {final_window_height}")
+
 
     def apply_app_styles(self):
         qss_style_string = """
@@ -211,6 +262,8 @@ class ImageConverterGUI(QMainWindow):
         file_group = QGroupBox("Wybór plików")
         file_layout = QVBoxLayout()
         file_group.setLayout(file_layout)
+        file_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        file_group.setFixedHeight(230) # Stała wysokość dla sekcji plików (zwiększona z 180/200)
         
         # Przycisk wyboru plików i lista
         file_header_layout = QHBoxLayout()
@@ -248,6 +301,7 @@ class ImageConverterGUI(QMainWindow):
         
         # Kontener na wszystkie opcje wewnątrz QGroupBox
         self.options_container_widget = QWidget()
+        self.options_container_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         options_layout = QGridLayout(self.options_container_widget) # Istniejący layout przypisany do kontenera
         # self.options_container_widget.setLayout(options_layout) # Już zrobione przez konstruktor QGridLayout
 
@@ -353,20 +407,23 @@ class ImageConverterGUI(QMainWindow):
         log_layout.addWidget(self.log_text)
         
         # main_layout.addWidget(log_group) # Zostanie dodane do splittera
+        log_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        log_group.setMinimumHeight(150)
 
         # ==== Konfiguracja Splittera ====
         main_splitter = QSplitter(Qt.Orientation.Vertical)
 
         # Górny panel dla file_group, options_group, action_layout, progress_bar
-        top_widget = QWidget()
-        top_layout = QVBoxLayout(top_widget)
+        self.top_widget = QWidget() # Zmieniono na self.top_widget
+        self.top_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        top_layout = QVBoxLayout(self.top_widget) # Użyj self.top_widget
         top_layout.addWidget(file_group)
         top_layout.addWidget(self.options_group) # Użyj self.options_group
         top_layout.addLayout(action_layout)
         top_layout.addWidget(self.progress_bar)
-        # top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
+        # self.top_widget.setLayout(top_layout) # Niepotrzebne, konstruktor QVBoxLayout już to robi
 
-        main_splitter.addWidget(top_widget)
+        main_splitter.addWidget(self.top_widget) # Użyj self.top_widget
         main_splitter.addWidget(log_group) # log_group bezpośrednio do splittera
 
         # Ustawienie początkowych rozmiarów splittera (dostosuj wartości wg potrzeb)
