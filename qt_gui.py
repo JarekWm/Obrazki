@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QProgressBar, QTextEdit, QComboBox, QLineEdit, QCheckBox,
                             QGridLayout, QGroupBox, QSplitter, QMessageBox, QScrollArea, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl, QSize, QByteArray
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QScreen
 from config import ConfigManager
 from file_manager import FileManager
 from image_converter import ImageConverter
@@ -156,7 +156,15 @@ class ImageConverterGUI(QMainWindow):
             if self.minimumHeight() > min_h:
                 min_h = self.minimumHeight()
 
-            final_window_height = max(min_h, target_window_height)
+            calculated_target_height = max(min_h, target_window_height)
+
+            # Ogranicz wysokość do dostępnej wysokości ekranu
+            screen = self.screen() if self.screen() else QApplication.primaryScreen()
+            if screen: # Upewnij się, że mamy obiekt screen
+                available_screen_height = screen.availableGeometry().height()
+                final_window_height = min(calculated_target_height, available_screen_height)
+            else: # Fallback, jeśli nie udało się uzyskać ekranu
+                final_window_height = calculated_target_height
             
             self.resize(self.width(), final_window_height)
             # self.log_message(f"Zmiana wysokości okna o: {delta_height}, stara_kont: {old_height}, nowa_kont: {new_height}, okno: {final_window_height}")
