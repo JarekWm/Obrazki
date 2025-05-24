@@ -1,0 +1,5 @@
+pillow-heif
+Pillow
+tkinterdnd2 # Dla GUI Tkinter
+PyQt6 # Dla GUI PyQt6
+kivy # Dla GUI Kivy 

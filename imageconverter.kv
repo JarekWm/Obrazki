@@ -1,0 +1,201 @@
+# Plik Kivy dla Image Converter
+# imageconverter.kv
+
+#:import Factory kivy.factory.Factory
+#:import os os
+
+<SelectableLabel>: # Definicja wyglądu dla elementów listy
+    # Ustawienia wyglądu Label, np. kolor zaznaczenia
+    canvas.before:
+        Color:
+            rgba: (0.0, 0.9, 0.1, 0.3) if self.selected else (0.5, 0.5, 0.5, 1) # Zielonkawe zaznaczenie
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<ConverterLayout>:
+    orientation: 'vertical'
+    padding: 10
+    spacing: 10
+    # Referencje do widgetów, aby można było się do nich odwołać w Pythonie
+    log_text_widget: log_output
+    # Zmień referencję z file_list_widget na recycle_view_widget
+    recycle_view_widget: file_recycle_view 
+    progress_bar_widget: progress_bar
+
+    # Sekcja wyboru plików
+    BoxLayout:
+        size_hint_y: None
+        height: 40
+        Button:
+            text: 'Wybierz pliki'
+            on_press: root.open_file_chooser()
+        Label:
+            text: 'Wybrane pliki (max 5):'
+            size_hint_x: 0.3
+            halign: 'right'
+            valign: 'middle'
+
+    ScrollView:
+        size_hint_y: 0.2 # Mniejsza wysokość dla listy
+        # Zastąp ListView przez RecycleView
+        RecycleView:
+            id: file_recycle_view
+            viewclass: 'SelectableLabel' # Użyj naszej niestandardowej klasy
+            data: root.recycle_view_data # Powiąż z property danych
+            scroll_type: ['bars', 'content']
+            scroll_wheel_distance: 30
+            bar_width: 10
+            RecycleBoxLayout: # Layout manager dla RecycleView
+                default_size: None, dp(24) # Wysokość elementów listy
+                default_size_hint: 1, None
+                size_hint_y: None
+                height: self.minimum_height
+                orientation: 'vertical'
+                spacing: dp(2)
+
+    # Sekcja opcji konwersji (używamy GridLayout dla łatwiejszego ułożenia)
+    GridLayout:
+        cols: 4
+        size_hint_y: None
+        height: 200 # Stała wysokość dla sekcji opcji
+        spacing: 5
+        padding: 5
+        
+        Label:
+            text: 'Format wyjściowy:'
+            halign: 'right'
+        Spinner:
+            id: format_spinner
+            text: root.output_format_prop # Powiązanie z property
+            values: root.available_formats_prop # Lista dostępnych formatów
+            on_text: root.output_format_prop = self.text # Aktualizacja property przy zmianie
+            size_hint_x: None
+            width: 100
+        Label: # Pusty label dla wyrównania
+        Label: # Pusty label
+
+        Label:
+            text: 'Maks. rozmiar (KB):'
+            halign: 'right'
+        TextInput:
+            id: max_size_input
+            text: root.max_size_prop
+            input_filter: 'int' # Akceptuj tylko liczby całkowite
+            multiline: False
+            size_hint_x: None
+            width: 100
+            on_text_validate: root.max_size_prop = self.text # Aktualizacja po Enter
+            # lub on_text: root.max_size_prop = self.text dla aktualizacji na bieżąco
+        Label:
+            text: '(dla JPEG/WebP)'
+            size_hint_x: None
+            width: 150
+        Label: # Pusty label
+
+        Label:
+            text: 'Dłuższa krawędź:'
+            halign: 'right'
+        TextInput:
+            id: longer_edge_input
+            text: root.longer_edge_prop
+            input_filter: 'int'
+            multiline: False
+            size_hint_x: None
+            width: 100
+            on_text_validate: root.longer_edge_prop = self.text
+        Label:
+            text: 'Krótsza krawędź:'
+            halign: 'right'
+        TextInput:
+            id: shorter_edge_input
+            text: root.shorter_edge_prop
+            input_filter: 'int'
+            multiline: False
+            size_hint_x: None
+            width: 100
+            on_text_validate: root.shorter_edge_prop = self.text
+            
+        Label:
+            text: 'Sufiks nazwy pliku:'
+            halign: 'right'
+        TextInput:
+            id: suffix_input
+            text: root.suffix_prop
+            multiline: False
+            on_text_validate: root.suffix_prop = self.text
+            # Rozciągnij na 2 kolumny
+            size_hint_x: None 
+            width: 210 # Szerokość pola + odstęp
+        Label: # Pusty label
+        Label: # Pusty label
+
+        Label:
+            text: 'Katalog wyjściowy:'
+            halign: 'right'
+        TextInput:
+            id: output_dir_input
+            text: root.output_dir_prop
+            multiline: False
+            readonly: True # Tylko do odczytu, ustawiany przez przycisk
+            # Rozciągnij na 2 kolumny
+            size_hint_x: None 
+            width: 210
+        Button:
+            text: 'Przeglądaj...'
+            on_press: root.open_dir_chooser()
+            size_hint_x: None
+            width: 100
+        Label: # Pusty label
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            CheckBox:
+                id: delete_originals_check
+                active: root.delete_originals_prop
+                on_active: root.delete_originals_prop = self.active
+                size_hint_x: None
+                width: 30
+            Label:
+                text: 'Usuń oryginały po konwersji'
+                size_hint_x: None # Dopasuj do tekstu
+                width: self.texture_size[0]
+            Label: # Reszta przestrzeni
+
+    # Przyciski akcji
+    BoxLayout:
+        size_hint_y: None
+        height: 44
+        Button:
+            text: 'Zapisz ustawienia'
+            on_press: root.save_settings()
+        Button:
+            id: convert_button # ID do potencjalnego wyłączania
+            text: 'Konwertuj'
+            on_press: root.start_conversion_thread()
+
+    # Pasek postępu
+    ProgressBar:
+        id: progress_bar
+        size_hint_y: None
+        height: 20
+        max: 100
+        value: root.progress_value_prop # Powiązanie z property
+
+    # Log działań
+    Label:
+        text: 'Log Działań:'
+        size_hint_y: None
+        height: 20
+        halign: 'left'
+
+    ScrollView:
+        size_hint_y: 0.3 # Więcej miejsca na log
+        TextInput:
+            id: log_output
+            text: ''
+            readonly: True
+            background_color: (0.95, 0.95, 0.95, 1) # Jasne tło dla odróżnienia
+            foreground_color: (0, 0, 0, 1)
+            font_name: 'RobotoMono-Regular' # Czytelna czcionka, jeśli dostępna 

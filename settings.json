@@ -1,0 +1,9 @@
+{
+    "max_size": "350",
+    "longer_edge": "1000",
+    "shorter_edge": "",
+    "suffix": "_converted",
+    "output_format": "JPEG",
+    "output_directory": "C:/Users/mikro/Pictures/konwersja",
+    "delete_originals": false
+}
