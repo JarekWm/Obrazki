@@ -4,6 +4,10 @@
     "shorter_edge": "",
     "suffix": "_converted",
     "output_format": "JPEG",
-    "output_directory": "C:/Users/mikro/Pictures/konwersja",
-    "delete_originals": false
+    "output_directory": "C:/Users/jw/Pictures/konwersja",
+    "delete_originals": false,
+    "webp_lossless": false,
+    "strip_metadata": true,
+    "number_output_files": false,
+    "window_geometry": "AdnQywADAAAAAAGJAAAAIAAABHYAAAL5AAABiQAAAD4AAAR2AAAC+QAAAAAAAAAABgAAAAGJAAAAPgAABHYAAAL5"
 }
